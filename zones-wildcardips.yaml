@@ -1,0 +1,42 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Populated Route53 zone that provides wildcard dns by ip address."
+# Create 4 zones in the form XX.my.zone, where XX is the hexadecimal representation
+# of the 3rd IP octet. This jinja template will render into a CFn template with 4 zones
+# and two A records for every hex number from 4 through 254 (*.xx and xx) in each zone 
+Parameters:
+  SubZones:
+    Description: "List of four SubZones"
+    Type: CommaDelimitedList
+  IPs:
+    Description: "List of IP prefixes for the 4 sub zones"
+    Type: CommaDelimitedList
+  ZoneName:
+    Description: "Zone (domain) name"
+    Type: String
+  Owner:
+    Description: "Owner Tag"
+    Type: String
+Resources:
+  {% for n in range(4) -%}
+  Zone{{n}}: 
+    Type: "AWS::Route53::HostedZone"
+    Properties: 
+      Name: !Join ['.', [!Select [{{n}}, !Ref SubZones], !Ref ZoneName]]
+      HostedZoneTags: 
+      - Key: "Owner"
+        Value: !Ref Owner
+  Records{{n}}:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneId: !Ref Zone{{n}}
+      RecordSets:
+      {% for i in range(4,255) -%}
+      {%- for x in ['', '*.'] -%}
+      - Name: !Join ['', ["{{x}}{{ '%02x' % i }}", ., !Select [{{n}}, !Ref SubZones], ., !Ref ZoneName, .]]
+        Type: A
+        TTL: "3600"
+        ResourceRecords: [!Join ['.', [!Select [{{n}}, !Ref IPs], '{{i}}']]]
+      {% endfor -%}
+      {% endfor %}
+  {% endfor %}
+
